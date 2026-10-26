@@ -5,11 +5,14 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include <cerrno>
+
+#if __has_include(<netinet/tcp.h>)
+#include <netinet/tcp.h>
+#endif
 #endif
 
 namespace sw::net {
@@ -77,10 +80,12 @@ Socket open_to(const std::string& host, std::uint16_t port, int type) {
 
 Socket connect_tcp(const std::string& host, std::uint16_t port) {
     Socket socket = open_to(host, port, SOCK_STREAM);
+#ifdef TCP_NODELAY
     if (socket != kBad) {
         int on = 1;
         setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&on), sizeof on);
     }
+#endif
     return socket;
 }
 
