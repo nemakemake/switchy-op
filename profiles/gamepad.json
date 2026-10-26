@@ -1,0 +1,56 @@
+{
+  "robot": {
+    "host": "127.0.0.1",
+    "port": 7000,
+    "key": "dev-key"
+  },
+  "drive": {
+    "forward": {
+      "axis": "left_y",
+      "invert": true,
+      "deadzone": 0.12,
+      "expo": 0.3,
+      "scale": 1.0
+    },
+    "turn": {
+      "axis": "right_x",
+      "invert": true,
+      "deadzone": 0.12,
+      "expo": 0.3,
+      "scale": 0.8
+    },
+    "deadman": "zr"
+  },
+  "actions": {
+    "light": {
+      "button": "y",
+      "trigger": "press",
+      "op": "set",
+      "mirror": "light",
+      "seconds": 1.0,
+      "confirm": false
+    },
+    "horn": {
+      "button": "b",
+      "trigger": "hold",
+      "op": "set",
+      "seconds": 1.0,
+      "confirm": false
+    },
+    "arm_home": {
+      "button": "x",
+      "trigger": "hold_for",
+      "op": "start",
+      "seconds": 1.0,
+      "confirm": true
+    },
+    "estop": {
+      "button": "minus",
+      "trigger": "press",
+      "op": "set",
+      "value": true,
+      "seconds": 1.0,
+      "confirm": false
+    }
+  }
+}

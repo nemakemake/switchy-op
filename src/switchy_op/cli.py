@@ -3,10 +3,12 @@
 import argparse
 import asyncio
 import contextlib
+import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from switchy_op.bindings import load_profile
 from switchy_op.demo import ROOT, run_demo
 from switchy_op.gateway import Gateway, load_config
 from switchy_op.sim import SimRobot
@@ -25,6 +27,15 @@ def _parser() -> argparse.ArgumentParser:
     gateway.add_argument("--port", type=int, default=7000)
     gateway.add_argument("--udp-port", type=int, default=7001)
     gateway.add_argument("--key", default="dev-key")
+    gateway.add_argument(
+        "--run-for", type=float, default=None, metavar="SECONDS", help="stop by itself after this"
+    )
+
+    export = commands.add_parser(
+        "export-profile", help="convert a YAML profile to the JSON the native client reads"
+    )
+    export.add_argument("profile", type=Path)
+    export.add_argument("-o", "--output", type=Path, default=None, help="default: next to input")
 
     demo = commands.add_parser("demo", help="scripted end-to-end demonstration with self-checks")
     demo.add_argument("--robot", type=Path, default=None)
@@ -51,9 +62,20 @@ async def _serve(args: argparse.Namespace) -> None:
     await gateway.start()
     print(f"gateway listening on {args.host}: tcp {gateway.tcp_port}, udp {gateway.udp_port}")
     try:
-        await asyncio.Event().wait()
+        if args.run_for is None:
+            await asyncio.Event().wait()
+        else:
+            await asyncio.sleep(args.run_for)
     finally:
         await gateway.stop()
+
+
+def _export_profile(args: argparse.Namespace) -> None:
+    profile = load_profile(args.profile)
+    output = args.output or args.profile.with_suffix(".json")
+    text = json.dumps(profile.model_dump(mode="json", exclude_none=True), indent=2)
+    output.write_text(text + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {output}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -62,6 +84,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "gateway":
             with contextlib.suppress(KeyboardInterrupt):
                 asyncio.run(_serve(args))
+            return 0
+        if args.command == "export-profile":
+            _export_profile(args)
             return 0
         if args.command == "demo":
             return 0 if asyncio.run(run_demo(args.robot, args.profile)) else 1
