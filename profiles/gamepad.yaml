@@ -1,0 +1,16 @@
+# Default layout for a Switch Pro Controller or Joy-Con pair (names are generic, see bindings.py).
+robot:
+  host: 127.0.0.1
+  port: 7000
+  key: dev-key
+
+drive:
+  forward: {axis: left_y, invert: true, deadzone: 0.12, expo: 0.3}
+  turn:    {axis: right_x, invert: true, deadzone: 0.12, expo: 0.3, scale: 0.8}
+  deadman: zr                      # nothing moves unless ZR is held
+
+actions:
+  light:    {button: y, trigger: press, mirror: light}     # flips the robot's real light state
+  horn:     {button: b, trigger: hold}
+  arm_home: {button: x, trigger: hold_for, seconds: 1.0, op: start, confirm: true}
+  estop:    {button: minus, trigger: press, value: true}
