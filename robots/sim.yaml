@@ -1,0 +1,30 @@
+# Gateway configuration for the simulated rover.
+name: sim-rover
+hb_ms: 100
+link_timeout_ms: 400
+
+drive:
+  type: differential
+  max_linear: 1.0        # m/s at full stick
+  max_angular: 2.0       # rad/s at full stick
+  max_accel_linear: 2.0
+  max_accel_angular: 4.0
+
+actions:
+  light:
+    kind: switch
+    label: Lights
+    on_link_loss: keep
+  horn:
+    kind: hold
+    label: Horn
+  estop:
+    kind: switch
+    label: Emergency stop
+  arm_home:
+    kind: long
+    label: Arm to home position
+    safety: confirm
+    requires: {estop: false, speed_below: 0.05}
+    min_interval_ms: 1000
+    on_link_loss: cancel
