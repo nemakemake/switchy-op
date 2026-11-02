@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <sys/select.h>
 
 #include <cerrno>
 
@@ -66,7 +67,36 @@ Socket open_to(const std::string& host, std::uint16_t port, int type) {
     for (addrinfo* a = found; a; a = a->ai_next) {
         Socket candidate = ::socket(a->ai_family, a->ai_socktype, a->ai_protocol);
         if (candidate == kBad) continue;
-        if (::connect(candidate, a->ai_addr, static_cast<int>(a->ai_addrlen)) == 0) {
+        if (type == SOCK_STREAM && !set_nonblocking(candidate)) {
+            close_socket(candidate);
+            continue;
+        }
+        bool connected = ::connect(candidate, a->ai_addr, static_cast<int>(a->ai_addrlen)) == 0;
+        if (!connected && type == SOCK_STREAM) {
+#ifdef _WIN32
+            const int err = WSAGetLastError();
+            bool pending = err == WSAEWOULDBLOCK || err == WSAEINPROGRESS;
+#else
+            bool pending = errno == EINPROGRESS || errno == EWOULDBLOCK;
+#endif
+            if (pending) {
+                fd_set writable, failed;
+                FD_ZERO(&writable); FD_ZERO(&failed);
+                FD_SET(candidate, &writable); FD_SET(candidate, &failed);
+                timeval timeout{3, 0};
+                int count = select(static_cast<int>(candidate) + 1, nullptr, &writable, &failed, &timeout);
+                int error = 0;
+#ifdef _WIN32
+                int length = sizeof error;
+#else
+                socklen_t length = sizeof error;
+#endif
+                connected = count > 0 && FD_ISSET(candidate, &writable) &&
+                    getsockopt(candidate, SOL_SOCKET, SO_ERROR,
+                               reinterpret_cast<char*>(&error), &length) == 0 && error == 0;
+            }
+        }
+        if (connected) {
             socket = candidate;
             break;
         }

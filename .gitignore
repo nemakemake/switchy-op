@@ -8,3 +8,6 @@ dist/
 .vscode/
 .idea/
 build/
+native/switch/*.elf
+native/switch/*.nacp
+native/switch/*.nro

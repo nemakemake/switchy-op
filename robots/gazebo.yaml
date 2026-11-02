@@ -1,0 +1,13 @@
+name: gazebo-rover
+hb_ms: 100
+link_timeout_ms: 400
+drive:
+  type: differential
+  max_linear: 1.0
+  max_angular: 2.0
+  max_accel_linear: 2.0
+  max_accel_angular: 4.0
+actions:
+  estop:
+    kind: switch
+    label: Emergency stop

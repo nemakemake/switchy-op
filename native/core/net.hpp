@@ -30,7 +30,7 @@ bool set_nonblocking(Socket socket);
 // True when the last send or receive failed only because it would block.
 bool would_block();
 
-// Blocking connect to an IPv4 address or name. Returns kBad on failure.
+// TCP connect waits at most 3 seconds per resolved IPv4 address (DNS is synchronous).
 Socket connect_tcp(const std::string& host, std::uint16_t port);
 
 // A UDP socket "connected" to the peer, so plain send works.

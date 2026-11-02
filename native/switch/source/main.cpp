@@ -22,6 +22,7 @@
 #include "bindings.hpp"
 #include "client.hpp"
 #include "json.hpp"
+#include "connections.hpp"
 
 namespace {
 
@@ -59,8 +60,9 @@ std::string read_file(const char* path) {
 class Screen {
 public:
     void show(const std::vector<std::string>& lines) {
-        for (std::size_t row = 0; row < lines.size() && row < 44; ++row)
-            std::printf("\x1b[%zu;1H%-79.79s", row + 1, lines[row].c_str());
+        for (std::size_t row = 0; row < 44; ++row)
+            std::printf("\x1b[%zu;1H%-79.79s", row + 1,
+                        row < lines.size() ? lines[row].c_str() : "");
         consoleUpdate(nullptr);
     }
 };
@@ -129,11 +131,15 @@ int main(int, char**) {
         return 0;
     }
 
+    while (appletMainLoop()) {
+    auto endpoint = connections::choose(screen, pad, *profile);
+    if (!endpoint) break;
+    notices.clear();
     std::map<std::uint32_t, std::string> action_names;
     sw::ClientConfig config;
-    config.host = profile->host;
-    config.port = profile->port;
-    config.key = profile->key;
+    config.host = endpoint->host;
+    config.port = endpoint->port;
+    config.key = endpoint->key;
     config.name = "switch";
 
     sw::ClientEvents events;
@@ -149,10 +155,15 @@ int main(int, char**) {
     sw::Bindings bindings(*profile);
     double next_attempt = 0;
     std::string status = "not connected";
+    bool quit = false;
+    bool input_ready = false;
 
     while (appletMainLoop()) {
         padUpdate(&pad);
-        if (padGetButtonsDown(&pad) & HidNpadButton_Plus) break;
+        if (padGetButtonsDown(&pad) & HidNpadButton_Plus) { quit = true; break; }
+        const u64 manager_chord = HidNpadButton_L | HidNpadButton_R;
+        if ((padGetButtons(&pad) & manager_chord) == manager_chord) break;
+        if (padGetButtons(&pad) == 0) input_ready = true;
         double now = now_seconds();
 
         if (!client.connected() && now >= next_attempt) {
@@ -168,7 +179,7 @@ int main(int, char**) {
         }
 
         if (client.connected()) {
-            sw::Output out = bindings.update(read_input(pad), now, client.state());
+            sw::Output out = bindings.update(input_ready ? read_input(pad) : sw::InputState{}, now, client.state());
             client.drive(out.vx, out.wz, out.deadman, out.held);
             for (const sw::Request& request : out.requests) {
                 std::uint32_t id = request.op == "start"
@@ -194,11 +205,17 @@ int main(int, char**) {
         };
         for (const std::string& line : notices) lines.push_back(line);
         lines.push_back("");
-        lines.push_back("Hold ZR to drive. Plus exits.");
+        lines.push_back("Hold ZR to drive. L+R: connections. Plus exits.");
         screen.show(lines);
     }
 
+    if (client.connected()) {
+        client.drive(0, 0, false, {});
+        client.update();
+    }
     client.close();
+    if (quit) break;
+    }
     socketExit();
     consoleExit(nullptr);
     return 0;

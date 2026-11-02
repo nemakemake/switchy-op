@@ -8,6 +8,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from switchy_op.backend import RobotBackend
 from switchy_op.bindings import load_profile
 from switchy_op.demo import ROOT, run_demo
 from switchy_op.gateway import Gateway, load_config
@@ -27,6 +28,8 @@ def _parser() -> argparse.ArgumentParser:
     gateway.add_argument("--port", type=int, default=7000)
     gateway.add_argument("--udp-port", type=int, default=7001)
     gateway.add_argument("--key", default="dev-key")
+    gateway.add_argument("--backend", choices=("sim", "gazebo"), default="sim")
+    gateway.add_argument("--bridge-port", type=int, default=7447)
     gateway.add_argument(
         "--run-for", type=float, default=None, metavar="SECONDS", help="stop by itself after this"
     )
@@ -50,24 +53,44 @@ def _parser() -> argparse.ArgumentParser:
 
 
 async def _serve(args: argparse.Namespace) -> None:
+    backend: RobotBackend
+
+    def close() -> None:
+        return None
+
+    if args.backend == "gazebo":
+        from switchy_op.gazebo import GazeboRobot
+
+        backend = robot = GazeboRobot(args.bridge_port)
+        close = robot.close
+        if args.robot == DEFAULT_ROBOT:
+            args.robot = ROOT / "robots" / "gazebo.yaml"
+        config = load_config(args.robot)
+        if any(name != "estop" or spec.kind != "switch" for name, spec in config.actions.items()):
+            close()
+            raise ValueError("Gazebo backend supports only the estop switch")
+    else:
+        backend = SimRobot()
+        config = load_config(args.robot)
     gateway = Gateway(
-        load_config(args.robot),
-        SimRobot(),
+        config,
+        backend,
         args.key.encode(),
         host=args.host,
         port=args.port,
         udp_port=args.udp_port,
         log=print,
     )
-    await gateway.start()
-    print(f"gateway listening on {args.host}: tcp {gateway.tcp_port}, udp {gateway.udp_port}")
     try:
+        await gateway.start()
+        print(f"gateway listening on {args.host}: tcp {gateway.tcp_port}, udp {gateway.udp_port}")
         if args.run_for is None:
             await asyncio.Event().wait()
         else:
             await asyncio.sleep(args.run_for)
     finally:
         await gateway.stop()
+        close()
 
 
 def _export_profile(args: argparse.Namespace) -> None:
