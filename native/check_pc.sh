@@ -5,6 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 mkdir -p build
+g++ -std=c++20 -O1 -Wall -Wextra -Wpedantic native/pc/video_selftest.cpp -o build/video_selftest
+./build/video_selftest
 case "$(uname -s)" in
     MINGW* | MSYS* | CYGWIN*) libs="-lws2_32" ;;
     *) libs="" ;;

@@ -15,6 +15,7 @@
 #include <deque>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -23,6 +24,7 @@
 #include "client.hpp"
 #include "json.hpp"
 #include "connections.hpp"
+#include "video_screen.hpp"
 
 namespace {
 
@@ -134,6 +136,19 @@ int main(int, char**) {
     while (appletMainLoop()) {
     auto endpoint = connections::choose(screen, pad, *profile);
     if (!endpoint) break;
+    auto video_config = sw::json_parse(read_file("sdmc:/switch/switchy-op/video.json"));
+    bool video_enabled = !video_config || video_config->bool_or("enabled", true);
+    bool require_video = !video_config || video_config->bool_or("require_video", true);
+    std::string video_url = video_config ? video_config->string_or("url", "") : "";
+    if (video_url.empty()) video_url = "rtsp://" + endpoint->host + ":8554/robot";
+    std::unique_ptr<sw::VideoReceiver> video;
+    std::unique_ptr<VideoScreen> video_screen;
+    sw::VideoFrame video_frame;
+    if (video_enabled) {
+        video_screen = std::make_unique<VideoScreen>();
+        if (video_screen->ready()) video = std::make_unique<sw::VideoReceiver>(video_url);
+        else video_screen.reset();
+    }
     notices.clear();
     std::map<std::uint32_t, std::string> action_names;
     sw::ClientConfig config;
@@ -157,10 +172,11 @@ int main(int, char**) {
     std::string status = "not connected";
     bool quit = false;
     bool input_ready = false;
+    sw::VideoDriveGuard video_guard;
 
     while (appletMainLoop()) {
         padUpdate(&pad);
-        if (padGetButtonsDown(&pad) & HidNpadButton_Plus) { quit = true; break; }
+        if (padGetButtons(&pad) & HidNpadButton_Plus) { quit = true; break; }
         const u64 manager_chord = HidNpadButton_L | HidNpadButton_R;
         if ((padGetButtons(&pad) & manager_chord) == manager_chord) break;
         if (padGetButtons(&pad) == 0) input_ready = true;
@@ -168,7 +184,7 @@ int main(int, char**) {
 
         if (!client.connected() && now >= next_attempt) {
             status = "connecting to " + config.host + ":" + std::to_string(config.port) + " ...";
-            screen.show({"switchy-op", "", status});
+            if (!video_screen) screen.show({"switchy-op", "", status});
             std::string problem;
             if (client.connect(problem)) {
                 status = "connected";
@@ -178,9 +194,21 @@ int main(int, char**) {
             }
         }
 
+        // connect() may block: sample the camera and controller again afterwards.
+        padUpdate(&pad);
+        if (video) video->snapshot(video_frame);
+        now = now_seconds();
+        bool video_live = video && sw::video_is_live(video_frame, now);
+        sw::Output displayed;
+        if (!client.connected()) video_guard.update(video_enabled && require_video, false, false);
         if (client.connected()) {
             sw::Output out = bindings.update(input_ready ? read_input(pad) : sw::InputState{}, now, client.state());
-            client.drive(out.vx, out.wz, out.deadman, out.held);
+            bool blocked = video_guard.update(video_enabled && require_video, video_live, out.deadman);
+            client.drive(blocked ? 0 : out.vx, blocked ? 0 : out.wz,
+                         !blocked && out.deadman, blocked ? std::vector<std::string>{} : out.held);
+            displayed.vx = blocked ? 0 : out.vx;
+            displayed.wz = blocked ? 0 : out.wz;
+            displayed.deadman = !blocked && out.deadman;
             for (const sw::Request& request : out.requests) {
                 std::uint32_t id = request.op == "start"
                                        ? client.start_long(request.name, request.confirmed)
@@ -206,7 +234,25 @@ int main(int, char**) {
         for (const std::string& line : notices) lines.push_back(line);
         lines.push_back("");
         lines.push_back("Hold ZR to drive. L+R: connections. Plus exits.");
-        screen.show(lines);
+        if (video_guard.blocked(video_enabled && require_video))
+            lines.push_back("DRIVE BLOCKED: live video required; release deadman to rearm.");
+        if (video_screen) {
+            double since_frame = video_frame.received_at > 0 ? (now - video_frame.received_at) * 1000 : -1;
+            video_screen->draw(video_frame, fmt("switchy-op | %s | battery %.0f%%",
+                client.connected() ? "CONNECTED" : "OFFLINE", state.number_or("battery", 0) * 100),
+                {"CONTROL", fmt("Speed %.2f m/s | heading %.0f", state.number_or("speed", 0), state.number_or("heading", 0)),
+                 fmt("Drive %+.0f%% | turn %+.0f%%", displayed.vx * 100, displayed.wz * 100),
+                 fmt("Deadman: %s", displayed.deadman ? "ACTIVE" : "RELEASED / BLOCKED"),
+                 fmt("Light %s | horn %s", state.bool_or("light", false) ? "ON" : "OFF", state.bool_or("horn", false) ? "ON" : "OFF"),
+                 "ZR: drive | L+R: menu | +: exit",
+                 notices.empty() ? "" : notices.back()},
+                {"VIDEO / LINK", fmt("Decoded: %.1f FPS", video_live ? video_frame.fps : 0),
+                 fmt("Since decoded frame: %.0f ms", since_frame),
+                 fmt("Frame interval: %.0f ms", video_frame.gap_ms),
+                 fmt("Reconnects: %lu", video_frame.reconnects),
+                 "RTT / packet loss: unavailable", status},
+                state.bool_or("estop", false), video_guard.blocked(video_enabled && require_video));
+        } else screen.show(lines);
     }
 
     if (client.connected()) {

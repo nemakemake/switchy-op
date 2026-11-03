@@ -19,20 +19,20 @@ INCLUDES	:=	include ../core
 
 APP_TITLE	:=	switchy-op
 APP_AUTHOR	:=	nemakemake
-APP_VERSION	:=	0.2.0
+APP_VERSION	:=	0.3.0
 ICON            :=      icon.jpg
 
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
 CFLAGS	:=	-g -Wall -O2 -ffunction-sections $(ARCH) $(DEFINES)
-CFLAGS	+=	$(INCLUDE) -D__SWITCH__
+CFLAGS	+=	$(INCLUDE) -D__SWITCH__ -DSWITCHY_VIDEO
 
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++20
 
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS	:= -lnx
+LIBS	:= -lavformat -lavcodec -lswscale -lswresample -lavutil -lass -lfreetype -lharfbuzz -lfribidi -lpng -ldav1d -lbz2 -lz -lnx -lm
 
 LIBDIRS	:= $(PORTLIBS) $(LIBNX)
 
