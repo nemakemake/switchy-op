@@ -40,6 +40,14 @@ def _parser() -> argparse.ArgumentParser:
     export.add_argument("profile", type=Path)
     export.add_argument("-o", "--output", type=Path, default=None, help="default: next to input")
 
+    profiles = commands.add_parser(
+        "serve-profiles", help="share control profiles with a Switch over Wi-Fi"
+    )
+    profiles.add_argument("--directory", type=Path, default=ROOT / "profiles")
+    profiles.add_argument("--host", default="0.0.0.0")
+    profiles.add_argument("--port", type=int, default=7080)
+    profiles.add_argument("--key", required=True, help="shared download key entered on Switch")
+
     demo = commands.add_parser("demo", help="scripted end-to-end demonstration with self-checks")
     demo.add_argument("--robot", type=Path, default=None)
     demo.add_argument("--profile", type=Path, default=None)
@@ -110,6 +118,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "export-profile":
             _export_profile(args)
+            return 0
+        if args.command == "serve-profiles":
+            from switchy_op.profile_server import serve_profiles
+
+            with contextlib.suppress(KeyboardInterrupt):
+                asyncio.run(serve_profiles(args.directory, args.host, args.port, args.key))
             return 0
         if args.command == "demo":
             return 0 if asyncio.run(run_demo(args.robot, args.profile)) else 1

@@ -19,7 +19,7 @@ INCLUDES	:=	include ../core
 
 APP_TITLE	:=	switchy-op
 APP_AUTHOR	:=	nemakemake
-APP_VERSION	:=	0.3.0
+APP_VERSION	:=	0.5.1
 ICON            :=      icon.jpg
 
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE

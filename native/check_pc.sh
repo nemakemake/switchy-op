@@ -13,6 +13,22 @@ case "$(uname -s)" in
 esac
 
 g++ -std=c++20 -O1 -Wall -Wextra -Wpedantic \
+    native/core/bindings.cpp native/core/profile_sync.cpp native/core/json.cpp \
+    native/core/net.cpp native/core/sha256.cpp native/pc/profile_sync_check.cpp \
+    $libs -o build/profile_sync_check
+uv run python native/check_profile_sync.py -v
+g++ -std=c++20 -O1 -Wall -Wextra -Wpedantic \
+    native/core/bindings.cpp native/core/profile_sync.cpp native/core/quick_start.cpp \
+    native/core/json.cpp native/core/net.cpp native/core/sha256.cpp \
+    native/pc/quick_start_selftest.cpp $libs -o build/quick_start_selftest
+./build/quick_start_selftest
+g++ -std=c++20 -O1 -Wall -Wextra -Wpedantic -DSWITCHY_RENAME_NO_REPLACE \
+    native/core/bindings.cpp native/core/profile_sync.cpp native/core/json.cpp \
+    native/core/net.cpp native/core/sha256.cpp native/pc/profile_sync_check.cpp \
+    $libs -o build/profile_sync_fat_check
+SWITCHY_PROFILE_CHECK=build/profile_sync_fat_check uv run python native/check_profile_sync.py -v
+
+g++ -std=c++20 -O1 -Wall -Wextra -Wpedantic \
     native/core/*.cpp native/pc/main.cpp $libs -o build/pc_check
 
 # The C++ HMAC must match Python's byte for byte, including at SHA-256 block boundaries.

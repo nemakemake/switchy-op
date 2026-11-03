@@ -55,6 +55,10 @@ uv run switchy-op export-profile profiles/gamepad.yaml
 
 Названия кнопок в профиле это подписи на Switch (A, B, X, Y). Правый стик поворот, левый вперёд и назад, ZR «мёртвая рука».
 
+В версии 0.4.0 профиль можно загрузить с ПК по Wi-Fi, без извлечения SD:
+`switchy-op serve-profiles --directory profiles --key my-download-key`, затем
+**L** в менеджере подключений Switch. [Инструкция](../docs/profile-sync.md).
+
 ## Что проверено, а что нет
 
 Проверено: всё в `core/` (на ПК, против настоящего шлюза).

@@ -40,8 +40,13 @@ bool pressed(const std::string& button, const InputState& input) {
 std::optional<Profile> profile_from_json(const Json& json, std::string& error) {
     Profile profile;
     if (const Json* robot = json.find("robot")) {
+        double port = robot->number_or("port", profile.port);
+        if (!robot->is_object() || port < 1 || port > 65535 || std::floor(port) != port) {
+            error = "profile: invalid robot port";
+            return std::nullopt;
+        }
         profile.host = robot->string_or("host", profile.host);
-        profile.port = std::uint16_t(robot->number_or("port", profile.port));
+        profile.port = std::uint16_t(port);
         profile.key = robot->string_or("key", profile.key);
     }
     const Json* drive = json.find("drive");

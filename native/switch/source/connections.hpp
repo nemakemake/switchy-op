@@ -6,12 +6,14 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <sstream>
 #include <optional>
 #include <string>
 #include <vector>
 #include "json.hpp"
 #include "bindings.hpp"
+#include "profile_sync.hpp"
 
 namespace connections {
 constexpr const char* path = "sdmc:/switch/switchy-op/connections.json";
@@ -38,12 +40,8 @@ inline bool save(const std::vector<Entry>& entries, std::size_t selected) {
     }
     root["entries"] = list;
     root["selected"] = sw::Json::of(double(selected));
-    const std::string temp = std::string(path) + ".tmp";
-    std::ofstream file(temp, std::ios::binary | std::ios::trunc);
-    file << sw::json_dump(root) << '\n';
-    file.close();
-    if (!file) return false;
-    return std::rename(temp.c_str(), path) == 0;
+    std::string error;
+    return sw::save_json_file(root, path, error);
 }
 
 inline bool text(const char* title, std::string& value, bool secret = false,
@@ -78,10 +76,12 @@ inline bool edit(Entry& e) {
 
 // No client exists while this menu is active. Controller input cannot reach the robot.
 template<class Screen>
-std::optional<Entry> choose(Screen& screen, PadState& pad, const sw::Profile& profile) {
+std::optional<Entry> choose(Screen& screen, PadState& pad, const sw::Profile& profile,
+                            const std::function<bool()>& import_profile = {}) {
     std::vector<Entry> entries;
     std::size_t selected = 0;
     std::string message;
+    sw::recover_profile(path);
     std::ifstream file(path, std::ios::binary);
     if (file) {
         std::stringstream buffer;
@@ -126,6 +126,11 @@ std::optional<Entry> choose(Screen& screen, PadState& pad, const sw::Profile& pr
                 confirm = false;
             }
         } else {
+            if ((down & HidNpadButton_L) && import_profile) {
+                message = import_profile() ? "Control profile downloaded and applied." : "Profile unchanged.";
+                released = false;
+                continue;
+            }
             if (!entries.empty()) {
                 if (down & (HidNpadButton_Up | HidNpadButton_StickLUp))
                     selected = (selected + entries.size() - 1) % entries.size();
@@ -157,10 +162,11 @@ std::optional<Entry> choose(Screen& screen, PadState& pad, const sw::Profile& pr
             }
         }
         std::vector<std::string> lines = {"switchy-op | Connections", "",
-            "D-pad / left stick: select     A: connect", "X: add    R: edit    Y: delete    Plus: exit", ""};
+            "D-pad / left stick: select     A: connect", "X: add    R: edit    Y: delete    Plus: exit",
+            "L: download control profile from PC over Wi-Fi", ""};
         if (entries.empty()) lines.push_back("No connections. Press X to add one.");
         std::size_t first = selected > 7 ? selected - 7 : 0;
-        for (std::size_t i = first; i < entries.size() && i < first + 12; ++i) {
+        for (std::size_t i = first; i < entries.size() && i < first + 10; ++i) {
             lines.push_back(std::string(i == selected ? "> " : "  ") + entries[i].name);
             lines.push_back("    " + entries[i].host + ":" + std::to_string(entries[i].port));
         }

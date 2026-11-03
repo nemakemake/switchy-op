@@ -25,6 +25,9 @@
 #include "json.hpp"
 #include "connections.hpp"
 #include "video_screen.hpp"
+#include "profile_menu.hpp"
+#include "quick_start_menu.hpp"
+#include "tui_brand.hpp"
 
 namespace {
 
@@ -62,9 +65,13 @@ std::string read_file(const char* path) {
 class Screen {
 public:
     void show(const std::vector<std::string>& lines) {
-        for (std::size_t row = 0; row < 44; ++row)
-            std::printf("\x1b[%zu;1H%-79.79s", row + 1,
-                        row < lines.size() ? lines[row].c_str() : "");
+        const auto& header = tui::banner();
+        for (std::size_t row = 0; row < 44; ++row) {
+            const char* text = row < header.size() ? header[row].c_str()
+                : row - header.size() < lines.size() ? lines[row - header.size()].c_str() : "";
+            std::printf("\x1b[%zu;1H\x1b[%sm%-79.79s\x1b[0m", row + 1,
+                        row < 6 ? "36;1" : "37", text);
+        }
         consoleUpdate(nullptr);
     }
 };
@@ -101,18 +108,35 @@ int main(int, char**) {
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     PadState pad;
     padInitializeDefault(&pad);
-    bool sockets_ready = R_SUCCEEDED(socketInitializeDefault());
-
     Screen screen;
+    screen.show({"Starting controller and network ..."});
+    bool sockets_ready = R_SUCCEEDED(socketInitializeDefault());
     std::deque<std::string> notices;
     auto note = [&](const std::string& text) {
         notices.push_back(text);
         while (notices.size() > 6) notices.pop_front();
     };
 
+    sw::recover_profile(kProfilePath);
     auto json = sw::json_parse(read_file(kProfilePath));
     std::string error;
     auto profile = json ? sw::profile_from_json(*json, error) : std::nullopt;
+    std::optional<connections::Entry> startup_endpoint;
+    if (sockets_ready) {
+        auto last = sw::load_last_session(quick_start::path);
+        if (last) {
+            auto choice = quick_start::choose(screen, pad, *last);
+            if (choice == quick_start::Choice::Exit) {
+                socketExit(); consoleExit(nullptr); return 0;
+            }
+            if (choice == quick_start::Choice::Resume) {
+                profile = last->profile;
+                json = last->profile_json;
+                const auto& e = last->endpoint;
+                startup_endpoint = connections::Entry{e.name, e.host, e.key, e.port};
+            }
+        }
+    }
 
     if (!profile || !sockets_ready) {
         std::vector<std::string> lines = {"switchy-op", ""};
@@ -122,19 +146,35 @@ int main(int, char**) {
             lines.push_back(std::string("Expected: ") + kProfilePath);
         }
         lines.push_back("");
-        lines.push_back("Press + to exit.");
+        lines.push_back("Press Y to download a profile from PC over Wi-Fi, + to exit.");
         while (appletMainLoop()) {
             padUpdate(&pad);
             if (padGetButtonsDown(&pad) & HidNpadButton_Plus) break;
+            if (sockets_ready && (padGetButtonsDown(&pad) & HidNpadButton_Y)) {
+                sw::Profile imported;
+                if (profile_menu::load(screen, pad, imported, kProfilePath)) {
+                    profile = std::move(imported);
+                    json = sw::json_parse(read_file(kProfilePath));
+                    break;
+                }
+            }
             screen.show(lines);
         }
-        if (sockets_ready) socketExit();
-        consoleExit(nullptr);
-        return 0;
+        if (!profile || !sockets_ready) {
+            if (sockets_ready) socketExit();
+            consoleExit(nullptr);
+            return 0;
+        }
     }
 
     while (appletMainLoop()) {
-    auto endpoint = connections::choose(screen, pad, *profile);
+    auto endpoint = startup_endpoint;
+    startup_endpoint.reset();
+    if (!endpoint) endpoint = connections::choose(screen, pad, *profile, [&] {
+        bool loaded = profile_menu::load(screen, pad, *profile, kProfilePath);
+        if (loaded) json = sw::json_parse(read_file(kProfilePath));
+        return loaded;
+    });
     if (!endpoint) break;
     auto video_config = sw::json_parse(read_file("sdmc:/switch/switchy-op/video.json"));
     bool video_enabled = !video_config || video_config->bool_or("enabled", true);
@@ -172,6 +212,7 @@ int main(int, char**) {
     std::string status = "not connected";
     bool quit = false;
     bool input_ready = false;
+    bool session_recorded = false;
     sw::VideoDriveGuard video_guard;
 
     while (appletMainLoop()) {
@@ -188,6 +229,13 @@ int main(int, char**) {
             std::string problem;
             if (client.connect(problem)) {
                 status = "connected";
+                if (!session_recorded && json) {
+                    std::string save_error;
+                    if (!sw::remember_session(quick_start::path,
+                            {endpoint->name, endpoint->host, endpoint->key, endpoint->port}, *json, save_error))
+                        note("Quick start not saved: " + save_error);
+                    session_recorded = true;
+                }
             } else {
                 status = problem;
                 next_attempt = now_seconds() + kReconnectEveryS;
