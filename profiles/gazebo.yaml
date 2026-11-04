@@ -1,0 +1,24 @@
+robot:
+  host: 127.0.0.1
+  port: 7000
+  key: test-key
+drive:
+  forward:
+    axis: left_y
+    invert: true
+    deadzone: 0.12
+    expo: 0.3
+    scale: 1.0
+  turn:
+    axis: right_x
+    invert: true
+    deadzone: 0.12
+    expo: 0.3
+    scale: 0.8
+  deadman: zr
+actions:
+  estop:
+    button: minus
+    trigger: press
+    op: set
+    value: true

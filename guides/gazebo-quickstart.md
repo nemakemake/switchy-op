@@ -9,6 +9,16 @@
 
 ## 1. Подготовить Linux
 
+Для переключения с Windows используйте свежую копию в домашней папке Linux:
+Windows-каталог `.venv` переносить нельзя.
+
+```bash
+git clone https://github.com/nemakemake/switchy-op.git ~/switchy-op
+cd ~/switchy-op
+```
+
+Если копия на Linux уже есть, выполните `git pull --ff-only` в ней.
+
 Рекомендуемая среда: Ubuntu 24.04, ROS 2 Jazzy, Gazebo Harmonic.
 Установите ROS 2 по [официальной инструкции](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html),
 включая настройку apt-репозитория. Затем установите готовые примеры:
@@ -24,7 +34,8 @@ source /opt/ros/jazzy/setup.bash
 проекта и выполните:
 
 ```bash
-uv sync
+uv sync --frozen
+uv run python tools/check_gazebo_transport.py
 ```
 
 uv подготовит Python 3.14 для шлюза. ROS-мост запускается отдельно системным
@@ -68,10 +79,33 @@ uv run switchy-op gateway --backend gazebo --host 0.0.0.0 --key test-key
 
 ## 5. Подключить пульт
 
+### Switch
+
+Перед перезагрузкой в Linux обновите `.nro` на SD до 0.5.1. Положите
+`profiles/video-disabled.json` на SD как `switch/switchy-op/video.json`:
+в тестовом примере камеры нет, а по умолчанию видео требуется для движения.
+Это возвращает текстовый экран и снимает только блокировку по видео.
+
+На Linux дополнительно запустите:
+
+```bash
+uv run switchy-op serve-profiles --directory profiles --key test-key
+hostname -I
+```
+
+На стартовом экране Switch нажмите **B**, если предлагается старый быстрый старт.
+В менеджере нажмите **L**, введите IP Linux, порт **7080**, ключ **test-key**;
+загрузите `gazebo.yaml` и подтвердите **A**. Затем добавьте или отредактируйте
+подключение: **IP Linux, TCP 7000, ключ test-key**. Скачивание профиля не меняет
+адреса уже сохранённых подключений. Отпустите кнопки после подключения и удерживайте ZR.
+Разрешите на Linux TCP 7000/7080 и UDP 7001, если включён брандмауэр.
+
+### Окно на ПК
+
 На компьютере с копией проекта, из его корня:
 
 ```bash
-uv run --extra ui switchy-op client --host LINUX_IP --key test-key
+uv run --extra ui switchy-op client --profile profiles/gazebo.yaml --host LINUX_IP --key test-key
 ```
 
 Замените `LINUX_IP` на адрес Linux-компьютера. Если всё работает на одной

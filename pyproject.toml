@@ -32,6 +32,9 @@ build-backend = "uv_build"
 line-length = 100
 target-version = "py314"
 
+[tool.ruff.per-file-target-version]
+"tools/gazebo_bridge.py" = "py310"
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 

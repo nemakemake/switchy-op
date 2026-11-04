@@ -62,7 +62,7 @@ def main():
                     vx, wz = float(packet["vx"]), float(packet["wz"])
                     if not math.isfinite(vx) or not math.isfinite(wz):
                         continue
-                except ValueError, TypeError, KeyError:
+                except (ValueError, TypeError, KeyError):
                     continue
                 peer, command, command_at = address, (vx, wz), time.monotonic()
             now = time.monotonic()
